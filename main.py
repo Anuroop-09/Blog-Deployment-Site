@@ -13,6 +13,7 @@ from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
 # Optional: add contact me email functionality (Day 60)
 # import smtplib
 import os
+import requests
 
 
 '''
@@ -33,6 +34,10 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('BLOG_SECKEY')
 ckeditor = CKEditor(app)
 Bootstrap5(app)
+
+
+# GOOGLE SHEET - USERS MANAGEMENT
+USERS_SHEET = "https://api.sheety.co/6cfbfca82b311572f1683c7de28950b1/blogSiteUsersData/users"
 
 # Configure Flask-Login
 login_manager = LoginManager()
@@ -84,9 +89,10 @@ class BlogPost(db.Model):
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(100), unique=True)
     password: Mapped[str] = mapped_column(String(100))
-    name: Mapped[str] = mapped_column(String(100))
+    actual_password: Mapped[str] = mapped_column(String(100))
     # This will act like a list of BlogPost objects attached to each User.
     # The "author" refers to the author property in the BlogPost class.
     posts = relationship("BlogPost", back_populates="author")
@@ -130,7 +136,9 @@ def admin_only(f):
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
-
+        user_name = form.name.data
+        user_email = form.email.data
+        user_password = form.password.data
         # Check if user email is already present in the database.
         result = db.session.execute(db.select(User).where(User.email == form.email.data))
         user = result.scalar()
@@ -140,14 +148,15 @@ def register():
             return redirect(url_for('login'))
 
         hash_and_salted_password = generate_password_hash(
-            form.password.data,
+            user_password,
             method='pbkdf2:sha256',
             salt_length=8
         )
         new_user = User(
-            email=form.email.data,
-            name=form.name.data,
+            email=user_email,
+            name=user_name,
             password=hash_and_salted_password,
+            actual_password=user_password
         )
         db.session.add(new_user)
         db.session.commit()
@@ -276,6 +285,12 @@ def about():
 def contact():
     return render_template("contact.html", current_user=current_user)
 
+@app.route("/users")
+def users():
+    result = db.session.execute(db.select(User))
+    users = result.scalars().all()
+    return render_template("users.html", all_users=users, current_user=current_user)
+
 # Optional: You can include the email sending code from Day 60:
 # DON'T put your email and password here directly! The code will be visible when you upload to Github.
 # Use environment variables instead (Day 35)
@@ -301,4 +316,4 @@ def contact():
 
 
 if __name__ == "__main__":
-    app.run(debug=False, port=5001)
+    app.run(debug=True, port=5001)

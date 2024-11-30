@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Secret</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            font-size: 62.5%;
+            font-family: sans-serif;
+        }
+
+        body {
+            /* height: 90vh; */
+        }
+
+        .users {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        tr th, tr td {
+            padding: 1rem;
+            border-radius: 5px;
+            color: #fff;
+            width: 30rem;
+            text-align: left;
+            font-size: 1.4rem;
+        }
+
+        tr th {
+            background-color: #495057;
+        }
+
+        tr td {
+            background-color: #ced4da;
+            color: #333;
+        }
+
+        .error {
+            height: 90vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            row-gap: 2rem;
+        }
+        .server-error-heading {
+            font-size: 4.8rem;
+            color: #495057;
+        }
+        .server-error-message {
+            font-size: 1.4rem;
+            padding: 1rem 4.8rem;
+            background-color: #ff6b6b;
+            border-radius: 50px;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    {% if current_user.id == 1: %}
+    <section>
+        <div class="users">
+            <table class="user-table">
+                <thead class="user=head">
+                    <tr>
+                        <th>User</th>
+                        <th>Email Id</th>
+                        <th>Actual Password</th>
+                    </tr>
+                </thead>
+                <tbody class="user-body">
+                {% for user in all_users %}
+                    <tr>
+                        <td>{{ user.name }}</td>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.actual_password }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% else %}
+    <div class="error">
+        <h1 class="server-error-heading">Prohibited Site Access!</h1>
+        <p class="server-error-message">You are trying to access Global Admin page which is restricted. Please contact
+            to the support team.</p>
+    </div>
+    {% endif %}
+</body>
+
+</html>
