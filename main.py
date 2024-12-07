@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
 import os
 
+# IMPORT's - All the required packages
 
 '''
 Make sure the required packages are installed: 
@@ -26,15 +27,11 @@ pip3 install -r requirements.txt
 This will install the packages from the requirements.txt for this project.
 '''
 
-
+# APP CONFIGURATION
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('BLOG_SECKEY')
 ckeditor = CKEditor(app)
 Bootstrap5(app)
-
-
-# GOOGLE SHEET - USERS MANAGEMENT
-USERS_SHEET = "https://api.sheety.co/6cfbfca82b311572f1683c7de28950b1/blogSiteUsersData/users"
 
 # Configure Flask-Login
 login_manager = LoginManager()
@@ -46,7 +43,7 @@ def load_user(user_id):
     return db.get_or_404(User, user_id)
 
 
-# For adding profile images to the comment section
+# AVATARS - Creating a custom gravator profile to the user
 gravatar = Gravatar(app,
                     size=100,
                     rating='g',
@@ -56,16 +53,35 @@ gravatar = Gravatar(app,
                     use_ssl=False,
                     base_url=None)
 
-# CREATE DATABASE
+
+# DATABASE CONFIGURATION
+## 1. INITIALIZING DATABASE SETUP
 class Base(DeclarativeBase):
     pass
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///posts.db'
+
+
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
 
-# CONFIGURE TABLES
+## CONFIGURE TABLES:
+### 1.USER table
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(100), unique=True)
+    password: Mapped[str] = mapped_column(String(100))
+    actual_password: Mapped[str] = mapped_column(String(100))
+    # This will act like a list of BlogPost objects attached to each User.
+    # The "author" refers to the author property in the BlogPost class.
+    posts = relationship("BlogPost", back_populates="author")
+    # Parent relationship: "comment_author" refers to the comment_author property in the Comment class.
+    comments = relationship("Comment", back_populates="comment_author")
+
+
+### 2.BLOG POST table
 class BlogPost(db.Model):
     __tablename__ = "blog_posts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -82,22 +98,7 @@ class BlogPost(db.Model):
     comments = relationship("Comment", back_populates="parent_post")
 
 
-# Create a User table for all your registered users
-class User(UserMixin, db.Model):
-    __tablename__ = "users"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(100))
-    email: Mapped[str] = mapped_column(String(100), unique=True)
-    password: Mapped[str] = mapped_column(String(100))
-    actual_password: Mapped[str] = mapped_column(String(100))
-    # This will act like a list of BlogPost objects attached to each User.
-    # The "author" refers to the author property in the BlogPost class.
-    posts = relationship("BlogPost", back_populates="author")
-    # Parent relationship: "comment_author" refers to the comment_author property in the Comment class.
-    comments = relationship("Comment", back_populates="comment_author")
-
-
-# Create a table for the comments on the blog posts
+### 3. COMMENTS table
 class Comment(db.Model):
     __tablename__ = "comments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -115,7 +116,8 @@ with app.app_context():
     db.create_all()
 
 
-# Create an admin-only decorator
+# DECORTOR FUNCTIONS
+## admin-only decorator
 def admin_only(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -124,11 +126,19 @@ def admin_only(f):
             return abort(403)
         # Otherwise continue with the route function
         return f(*args, **kwargs)
-
     return decorated_function
 
 
-# Register new users into the User database
+# PAGES
+## 1.Landing/home Page
+@app.route('/')
+def get_all_posts():
+    result = db.session.execute(db.select(BlogPost))
+    posts = result.scalars().all()
+    return render_template("index.html", all_posts=posts, current_user=current_user)
+
+
+## 2.User Registration Page
 @app.route('/register', methods=["GET", "POST"])
 def register():
     form = RegisterForm()
@@ -162,7 +172,7 @@ def register():
         return redirect(url_for("get_all_posts"))
     return render_template("register.html", form=form, current_user=current_user)
 
-
+## 3.Login Page
 @app.route('/login', methods=["GET", "POST"])
 def login():
     form = LoginForm()
@@ -186,20 +196,8 @@ def login():
     return render_template("login.html", form=form, current_user=current_user)
 
 
-@app.route('/logout')
-def logout():
-    logout_user()
-    return redirect(url_for('get_all_posts'))
 
-
-@app.route('/')
-def get_all_posts():
-    result = db.session.execute(db.select(BlogPost))
-    posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts, current_user=current_user)
-
-
-# Add a POST method to be able to post comments
+## 4.Show Post Page
 @app.route("/post/<int:post_id>", methods=["GET", "POST"])
 def show_post(post_id):
     requested_post = db.get_or_404(BlogPost, post_id)
@@ -221,6 +219,7 @@ def show_post(post_id):
     return render_template("post.html", post=requested_post, current_user=current_user, form=comment_form)
 
 
+## 5.CREATE NEW POST Page
 # Use a decorator so only an admin user can create new posts
 @app.route("/new-post", methods=["GET", "POST"])
 @admin_only
@@ -240,9 +239,10 @@ def add_new_post():
         return redirect(url_for("get_all_posts"))
     return render_template("make-post.html", form=form, current_user=current_user)
 
-
+## 5.EDIT POST
 # Use a decorator so only an admin user can edit a post
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+@admin_only
 def edit_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
     edit_form = CreatePostForm(
@@ -262,31 +262,73 @@ def edit_post(post_id):
         return redirect(url_for("show_post", post_id=post.id))
     return render_template("make-post.html", form=edit_form, is_edit=True, current_user=current_user)
 
-
+## 5.DELETE POST
 # Use a decorator so only an admin user can delete a post
 @app.route("/delete/<int:post_id>")
 @admin_only
 def delete_post(post_id):
+    # Deleting all the comments added to the current post to be deleted
+    overall_comments_by_user = db.session.execute(
+        db.select(Comment).where(Comment.post_id == post_id)).scalars().all()
+    if overall_comments_by_user != 0:
+        print('Stated deleting comments')
+        for individual_comment in overall_comments_by_user:
+            db.session.delete(individual_comment)
+        print('Deleting comments completed')
+    else:
+        print('No comments available to delete for the user')
+    # Delete post from BlogPost table from db
     post_to_delete = db.get_or_404(BlogPost, post_id)
     db.session.delete(post_to_delete)
     db.session.commit()
     return redirect(url_for('get_all_posts'))
 
-
+## 6.ABOUT Page
 @app.route("/about")
 def about():
     return render_template("about.html", current_user=current_user)
 
-
+## 7.CONTACT Page
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     return render_template("contact.html", current_user=current_user)
 
+## 8.LOGOUT
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('get_all_posts'))
+
+## 9.USERS page (admin_only)
 @app.route("/users")
+@admin_only
 def users():
     result = db.session.execute(db.select(User))
     users = result.scalars().all()
     return render_template("users.html", all_users=users, current_user=current_user)
+
+## 10.DELETE USER
+@app.route("/delete_user/<int:user_id>")
+@admin_only
+def delete_user(user_id):
+    # Deleting all the comments added by the current user to be deleted
+    overall_comments_by_user = db.session.execute(
+        db.select(Comment).where(Comment.author_id == user_id)).scalars().all()
+    if overall_comments_by_user != 0:
+        print('Stated deleting comments')
+        for individual_comment in overall_comments_by_user:
+            db.session.delete(individual_comment)
+        print('Deleting comments completed')
+    else:
+        print('No comments available to delete for the user')
+
+    # Delete user from User table from db
+    user_to_delete = db.session.execute(db.select(User).where(User.id == user_id)).scalar()
+    db.session.delete(user_to_delete)
+    print('User deleted from the database')
+    db.session.commit()
+    return redirect(url_for('users'))
+
 
 # Optional: You can include the email sending code from Day 60:
 # DON'T put your email and password here directly! The code will be visible when you upload to Github.
