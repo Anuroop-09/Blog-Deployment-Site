@@ -309,7 +309,6 @@ def users():
 
 ## 10.DELETE USER
 @app.route("/delete_user/<int:user_id>")
-@admin_only
 def delete_user(user_id):
     # Deleting all the comments added by the current user to be deleted
     overall_comments_by_user = db.session.execute(
